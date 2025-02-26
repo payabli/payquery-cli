@@ -4,16 +4,24 @@ use serde::de::Error as SerdeDeError;
 use reqwest::blocking::Client;
 use crate::pretty::{prettify_json, prettify_yaml, fancy_status};
 use crate::args::{split_args, build_url, parse_filters, get_nested_value};
+use crate::config::{Config, EnvironmentConfig};
 
 mod pretty;
 mod args;
+mod config;
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
-    let (only_records, format) = parse_args(&args);
-    let api_token = get_env_var("PAYABLI_API_TOKEN");
-    let base_url = get_base_url();
-    let (route_parts, filter_args, sort_clause) = process_route_args(&args);
+    if args.contains(&"new".to_string()) {
+        Config::create_new_config();
+        return;
+    }
+    let (only_records, format, config_name) = parse_args(&args);
+    let config = Config::load();
+    let env_config = config.environments.get(&config_name).unwrap_or(&config.environments["default"]);
+    let api_token = &env_config.api_token;
+    let base_url = get_base_url(&env_config.environment);
+    let (route_parts, filter_args, sort_clause) = process_route_args(&args, &env_config);
     let url = build_url(&base_url, &route_parts);
     let query_params = parse_filters(&filter_args).unwrap_or_else(|e| handle_error(format!("Error parsing filters: {}", e)));
 
@@ -29,10 +37,11 @@ fn main() {
     }
 }
 
-fn parse_args(args: &[String]) -> (Option<usize>, &str) {
+fn parse_args(args: &[String]) -> (Option<usize>, &str, String) {
     let mut only_records = None;
     let mut format = "--json";
 
+    let mut config_name = "default".to_string();
     let mut args_iter = args.iter().peekable();
     while let Some(arg) = args_iter.next() {
         match arg.as_str() {
@@ -45,35 +54,39 @@ fn parse_args(args: &[String]) -> (Option<usize>, &str) {
             "--yaml" => {
                 format = "--yaml";
             }
+            "for" => {
+                if let Some(value) = args_iter.peek() {
+                    config_name = value.to_string();
+                    args_iter.next(); // Consume the config name after "for"
+                }
+            }
             _ => {}
         }
     }
 
-    (only_records, format)
+    (only_records, format, config_name)
 }
 
-fn get_env_var(var: &str) -> String {
-    env::var(var).unwrap_or_else(|_| handle_error(format!("Error: {} environment variable must be set", var)))
-}
-
-fn get_base_url() -> &'static str {
-    match env::var("PAYABLI_ENVIRONMENT").as_deref() {
-        Ok("production") => "https://api-payabli.com",
-        Ok("qa") => "https://api-qa.payabli.com",
+fn get_base_url(environment: &str) -> &'static str {
+    match environment {
+        "production" => "https://api-payabli.com",
+        "qa" => "https://api-qa.payabli.com",
         _ => "https://api-sandbox.payabli.com",
     }
 }
 
-fn process_route_args(args: &[String]) -> (Vec<String>, Vec<String>, Option<(String, String)>) {
+
+
+fn process_route_args(args: &[String], env_config: &EnvironmentConfig) -> (Vec<String>, Vec<String>, Option<(String, String)>) {
     let start_index = args.iter().position(|arg| !arg.starts_with("--") && !arg.parse::<usize>().is_ok()).unwrap_or(0);
     let (mut route_parts, filter_args, sort_clause) = split_args(&args[start_index..]);
 
     if let Some(last_param) = route_parts.last() {
         if last_param == "org" {
-            let org_id = get_env_var("PAYABLI_ORG_ID");
+            let org_id = env_config.org_id.clone();
             route_parts.push(org_id);
         } else if !last_param.chars().any(|c| c.is_digit(10)) {
-            let entrypoint = get_env_var("PAYABLI_ENTRYPOINT");
+            let entrypoint = env_config.entrypoint.clone();
             route_parts.push(entrypoint);
         }
     }
