@@ -18,7 +18,9 @@ fn main() {
     }
     let (only_records, format, config_name) = parse_args(&args);
     let config = Config::load();
-    let env_config = config.environments.get(&config_name).unwrap_or(&config.environments["default"]);
+    let env_config = config.environments.get(&config_name).unwrap_or_else(|| {
+        handle_error(format!("Configuration '{}' not found. Please provide a valid configuration name.", config_name))
+    });
     let api_token = &env_config.api_token;
     let base_url = get_base_url(&env_config.environment);
     let (route_parts, filter_args, sort_clause) = process_route_args(&args, &env_config);
