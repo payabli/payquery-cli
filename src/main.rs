@@ -2,8 +2,8 @@ use std::env;
 use std::process;
 use serde::de::Error as SerdeDeError;
 use reqwest::blocking::Client;
-use crate::pretty::{prettify_json, prettify_yaml, fancy_status};
-use crate::args::{split_args, build_url, parse_filters, get_nested_value};
+use crate::pretty::{prettify_json, prettify_yaml, fancy_status, boxed_message};
+use crate::args::{split_args, build_url, parse_filters, get_nested_value, extract_only_clause, extract_for_clause};
 use crate::config::{Config, EnvironmentConfig};
 
 mod pretty;
@@ -16,7 +16,9 @@ fn main() {
         Config::create_new_config();
         return;
     }
-    let (only_records, format, config_name) = parse_args(&args);
+    let (format, quiet) = parse_args(&args);
+    let config_name = extract_for_clause(&args);
+    let only_records = extract_only_clause(&args);
     let config = Config::load();
     let env_config = config.environments.get(&config_name).unwrap_or_else(|| {
         handle_error(format!("Configuration '{}' not found. Please provide a valid configuration name.", config_name))
@@ -33,40 +35,34 @@ fn main() {
         .query(&query_params)
         .send();
 
+    if !quiet {
+        println!("{}", boxed_message(Some("🔧"), &format!("Config: {}", config_name)));
+        println!("{}", boxed_message(Some("🚀"), &url));
+    }
+
     match result {
-        Ok(resp) => handle_response(resp, only_records, sort_clause, format, &args),
+        Ok(resp) => handle_response(resp, only_records, sort_clause, format, &args, quiet),
         Err(e) => eprintln!("Request failed: {}", e),
     }
 }
 
-fn parse_args(args: &[String]) -> (Option<usize>, &str, String) {
-    let mut only_records = None;
+fn parse_args(args: &[String]) -> (&str, bool) {
     let mut format = "--json";
+    let mut quiet = false;
 
-    let mut config_name = "default".to_string();
-    let mut args_iter = args.iter().peekable();
-    while let Some(arg) = args_iter.next() {
+    for arg in args {
         match arg.as_str() {
-            "--only" => {
-                if let Some(value) = args_iter.peek() {
-                    only_records = value.parse::<usize>().ok();
-                    args_iter.next(); // Consume the number after --only
-                }
-            }
             "--yaml" => {
                 format = "--yaml";
             }
-            "for" => {
-                if let Some(value) = args_iter.peek() {
-                    config_name = value.to_string();
-                    args_iter.next(); // Consume the config name after "for"
-                }
+            "--quiet" => {
+                quiet = true;
             }
             _ => {}
         }
     }
 
-    (only_records, format, config_name)
+    (format, quiet)
 }
 
 fn get_base_url(environment: &str) -> &'static str {
@@ -96,8 +92,10 @@ fn process_route_args(args: &[String], env_config: &EnvironmentConfig) -> (Vec<S
     (route_parts, filter_args, sort_clause)
 }
 
-fn handle_response(resp: reqwest::blocking::Response, only_records: Option<usize>, sort_clause: Option<(String, String)>, format: &str, args: &[String]) {
-    println!("{}", fancy_status(&format!("Status: {}", resp.status())));
+fn handle_response(resp: reqwest::blocking::Response, only_records: Option<usize>, sort_clause: Option<(String, String)>, format: &str, args: &[String], quiet: bool) {
+    if !quiet {
+        println!("{}", fancy_status(&format!("Status: {}", resp.status())));
+    }
     match resp.text() {
         Ok(text) => process_text(&text, only_records, sort_clause, format, args),
         Err(e) => eprintln!("Error reading response: {}", e),

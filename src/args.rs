@@ -13,11 +13,22 @@ pub fn get_keyword_map() -> HashMap<&'static str, String> {
     map
 }
 
+pub fn extract_only_clause(args: &[String]) -> Option<usize> {
+    let only_pos = args.iter().position(|x| x == "only");
+    only_pos.and_then(|pos| args.get(pos + 1).and_then(|value| value.parse::<usize>().ok()))
+}
+
+pub fn extract_for_clause(args: &[String]) -> String {
+    let for_pos = args.iter().position(|x| x == "for");
+    for_pos.and_then(|pos| args.get(pos + 1).cloned()).unwrap_or_else(|| "default".to_string())
+}
+
 pub fn replace_keywords(arg: &str, keyword_map: &HashMap<&str, String>) -> String {
     keyword_map.get(arg).cloned().unwrap_or_else(|| arg.to_string())
 }
 
 pub fn split_args(args: &[String]) -> (Vec<String>, Vec<String>, Option<(String, String)>) {
+    let only_pos = args.iter().position(|x| x == "only").map(|pos| pos + 2);
     let for_pos = args.iter().position(|x| x == "for");
     let where_pos = args.iter().position(|x| x == "where");
     let by_pos = args.iter().position(|x| x == "by");
@@ -26,13 +37,14 @@ pub fn split_args(args: &[String]) -> (Vec<String>, Vec<String>, Option<(String,
         .iter()
         .filter_map(|&pos| pos)
         .min();
-
-    let route_parts = match first_clause_pos {
-        Some(pos) => args[..pos].to_vec(),
-        None => args.to_vec(),
+    
+    let route_parts = match (only_pos, first_clause_pos) {
+        (Some(only_pos), Some(first_pos)) => args[only_pos..first_pos].to_vec(),
+        (Some(only_pos), None) => args[only_pos..].to_vec(),
+        (None, Some(first_pos)) => args[..first_pos].to_vec(),
+        (None, None) => args.to_vec(),
     };
 
-    
     let filter_args = match (where_pos, by_pos) {
         (Some(w_pos), Some(b_pos)) if b_pos > w_pos => args[w_pos + 1..b_pos].to_vec(),
         (Some(w_pos), _) => args[w_pos + 1..].to_vec(),

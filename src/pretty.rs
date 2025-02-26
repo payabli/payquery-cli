@@ -38,27 +38,36 @@ fn colorize_output(text: &str) -> String {
 pub fn fancy_status(status: &str) -> String {
     let status_code = status.split_whitespace().nth(1).unwrap_or("0");
     let (emoji, color) = match status_code.chars().next() {
-        Some('2') => ("✅", Color::Green),
-        Some('3') => ("⚠️", Color::Yellow),
-        Some('4') => ("❌", Color::Red),
-        Some('5') => ("🔥", Color::Red),
-        _ => ("ℹ️", Color::White),
+        Some('2') => (Some("✅"), Color::Green),
+        Some('3') => (Some("⚠️"), Color::Yellow),
+        Some('4') => (Some("❌"), Color::Red),
+        Some('5') => (Some("🔥"), Color::Red),
+        _ => (None, Color::White),
     };
 
     let trimmed_status = status.trim();
-    let total_length = emoji.len() + trimmed_status.len() + 2; // 2 for spaces around the emoji
-    let box_width = total_length + 2; // 2 for the box edges
+    let boxed_message = boxed_message(emoji, trimmed_status);
+
+    boxed_message.color(color).bold().to_string()
+}
+
+pub fn boxed_message(emoji: Option<&str>, message: &str) -> String {
+    let emoji_str = emoji.unwrap_or("");
+    let total_length = emoji_str.len() + message.len() + if emoji.is_some() { 2 } else { 0 }; // 2 for spaces around the emoji if present
+    let box_width = total_length - 1; 
 
     let top_border =    format!("┌─{:─<width$}┐", "", width = box_width);
-    let middle_line =   format!("│ {} {:<width$} │", emoji, trimmed_status, width = trimmed_status.len() + emoji.len());
+    let middle_line =   if emoji.is_some() {
+        format!("│ {} {:<width$} │", emoji_str, message, width = message.len() + emoji_str.len() - 3)
+    } else {
+        format!("│ {:<width$} │", message, width = message.len() - 3)
+    };
     let bottom_border = format!("└─{:─<width$}┘", "", width = box_width);
 
-    let boxed_message = format!(
+    format!(
         "{}\n\
          {}\n\
          {}",
         top_border, middle_line, bottom_border
-    );
-
-    boxed_message.color(color).bold().to_string()
+    )
 }
