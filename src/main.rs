@@ -3,7 +3,7 @@ use std::process;
 use serde::de::Error as SerdeDeError;
 use reqwest::blocking::Client;
 use crate::pretty::{prettify_json, prettify_yaml, fancy_status, boxed_message};
-use crate::args::{split_args, build_url, parse_filters, get_nested_value, extract_only_clause, extract_for_clause};
+use crate::args::{split_args, build_url, parse_filters, get_nested_value, extract_only_clause, extract_for_clause, replace_keywords_in_args};
 use crate::config::{Config, EnvironmentConfig};
 
 mod pretty;
@@ -12,20 +12,30 @@ mod config;
 
 fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
+    if args.contains(&"help".to_string()) {
+        print_help();
+        return;
+    }
+    if args.contains(&"list".to_string()) {
+        list_configs();
+        return;
+    }
     if args.contains(&"new".to_string()) {
         Config::create_new_config();
         return;
     }
-    let (format, quiet) = parse_args(&args);
-    let config_name = extract_for_clause(&args);
-    let only_records = extract_only_clause(&args);
+    let replaced_args_string = replace_keywords_in_args(&args);
+    let replaced_args: Vec<String> = replaced_args_string.split_whitespace().map(String::from).collect();
+    let (format, quiet) = parse_args(&replaced_args);
+    let config_name = extract_for_clause(&replaced_args);
+    let only_records = extract_only_clause(&replaced_args);
     let config = Config::load();
     let env_config = config.environments.get(&config_name).unwrap_or_else(|| {
         handle_error(format!("Configuration '{}' not found. Please provide a valid configuration name.", config_name))
     });
     let api_token = &env_config.api_token;
     let base_url = get_base_url(&env_config.environment);
-    let (route_parts, filter_args, sort_clause) = process_route_args(&args, &env_config);
+    let (route_parts, filter_args, sort_clause) = process_route_args(&replaced_args, &env_config);
     let url = build_url(&base_url, &route_parts);
     let query_params = parse_filters(&filter_args).unwrap_or_else(|e| handle_error(format!("Error parsing filters: {}", e)));
 
@@ -44,6 +54,58 @@ fn main() {
         Ok(resp) => handle_response(resp, only_records, sort_clause, format, &args, quiet),
         Err(e) => eprintln!("Request failed: {}", e),
     }
+}
+
+fn print_help() {
+    println!(
+        "payquery - A command-line interface for calling Payabli's Query APIs.\n\
+        \n\
+        USAGE:\n\
+          payquery [SUBCOMMAND] [OPTIONS] [only N] API endpoint [CLAUSES]\n\
+        \n\
+        SUBCOMMANDS:\n\
+          new                   Create a new configuration.\n\
+          list                  List all available configurations.\n\
+          help                  Show this help message.\n\
+        \n\
+        OPTIONS:\n\
+          --json                Output in JSON format (default).\n\
+          --yaml                Output in YAML format.\n\
+          --quiet               Don't output information besides the query result.\n\
+        \n\
+        CLAUSES:\n\
+          only N ...            Limit the number of records to N.\n\
+          (comes before the API endpoint)\n\
+          ... for NAME          Use the configuration named NAME.\n\
+          ... where FILTERS     FILTER records based on the given conditions.\n\
+          (https://docs.payabli.com/developer-guides/reporting-filters-and-conditions-reference)\n\
+          ... by FIELD          Sort records by FIELD in ascending order.\n\
+          ... by FIELD desc     Sort records by FIELD in descending order.\n\
+          ... crop              Output only the sorted field values.\n\
+          (must come after a BY clause)\n\
+        \n\
+        EXAMPLES:\n\
+          payquery new\n\
+          payquery list\n\
+          payquery only 5 transactions\n\
+          payquery chargebacks where method eq card\n\
+          payquery batches for ISV_Pizzabli by TransactionDate\n\
+          payquery only 10 customers for ISV_Pizzabli where firstname eq John by Lastname crop\n\
+        \n\
+        CONFIGURATION:\n\
+          Configurations are stored in a YAML file located in your home directory as 'payquery.yml'.\n\
+          Each configuration contains API token, organization ID, entrypoint, and environment.\n\
+          Use the 'new' subcommand to create or update configurations.\n"
+    );
+}
+
+fn list_configs() {
+    let config = Config::load();
+    println!("Available configurations:");
+    for (name, _) in config.environments {
+        println!("  - {}", name);
+    }
+    println!();
 }
 
 fn parse_args(args: &[String]) -> (&str, bool) {

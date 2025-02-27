@@ -1,16 +1,57 @@
 use std::collections::HashMap;
+use chrono::{Utc, Duration, Datelike, NaiveDate, Month};
+use std::str::FromStr;
 
 pub fn get_keyword_map() -> HashMap<&'static str, String> {
-    //let now = Utc::now();
-    //let today = now.date_naive().and_hms_opt(0, 0, 0).unwrap(); // Use `and_hms_opt` with `unwrap()`
-    //let yesterday = today - Duration::try_days(1).unwrap(); // Use `try_days` with `unwrap()`
+    let now = Utc::now();
+    let today = now.date_naive().and_hms_opt(0, 0, 0).unwrap(); 
+    let yesterday = today - Duration::try_days(1).unwrap(); 
+    let tomorrow = today + Duration::try_days(1).unwrap(); 
 
-    let map = HashMap::new();
-    //map.insert("now", now.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
-    //map.insert("today", today.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
-    //map.insert("yesterday", yesterday.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    let mut map = HashMap::new();
+    map.insert("now", now.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    map.insert("today", today.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    map.insert("yesterday", yesterday.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    map.insert("tomorrow", tomorrow.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+
+    // Add time frame keywords
+    let start_of_week = today - Duration::days(today.weekday().num_days_from_monday() as i64);
+    let start_of_next_week = start_of_week + Duration::weeks(1);
+    let start_of_last_week = start_of_week - Duration::weeks(1);
+
+    let start_of_month = today.with_day(1).unwrap();
+    let start_of_next_month = start_of_month + Duration::days(31);
+    let start_of_last_month = start_of_month - Duration::days(1);
+
+    let start_of_year = today.with_ordinal(1).unwrap();
+    let start_of_next_year = start_of_year + Duration::days(365);
+    let start_of_last_year = start_of_year - Duration::days(1);
+
+    map.insert("this week", start_of_week.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    map.insert("next week", start_of_next_week.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    map.insert("last week", start_of_last_week.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+
+    map.insert("this month", start_of_month.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    map.insert("next month", start_of_next_month.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    map.insert("last month", start_of_last_month.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+
+    map.insert("this year", start_of_year.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    map.insert("next year", start_of_next_year.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
+    map.insert("last year", start_of_last_year.format("%Y-%m-%dT%H:%M:%S%.3f").to_string());
 
     map
+}
+
+pub fn replace_keywords(arg: &str, keyword_map: &HashMap<&str, String>) -> String {
+    let mut replaced_arg = arg.to_string();
+    let mut sorted_keywords: Vec<_> = keyword_map.keys().collect();
+    sorted_keywords.sort_by_key(|k| std::cmp::Reverse(k.len()));
+    for keyword in sorted_keywords {
+        if let Some(replacement) = keyword_map.get(keyword) {
+            replaced_arg = replaced_arg.replace(keyword, replacement);
+        }
+    }
+    replaced_arg
 }
 
 pub fn extract_only_clause(args: &[String]) -> Option<usize> {
@@ -21,10 +62,6 @@ pub fn extract_only_clause(args: &[String]) -> Option<usize> {
 pub fn extract_for_clause(args: &[String]) -> String {
     let for_pos = args.iter().position(|x| x == "for");
     for_pos.and_then(|pos| args.get(pos + 1).cloned()).unwrap_or_else(|| "default".to_string())
-}
-
-pub fn replace_keywords(arg: &str, keyword_map: &HashMap<&str, String>) -> String {
-    keyword_map.get(arg).cloned().unwrap_or_else(|| arg.to_string())
 }
 
 pub fn split_args(args: &[String]) -> (Vec<String>, Vec<String>, Option<(String, String)>) {
@@ -65,14 +102,42 @@ pub fn build_url(base: &str, route_parts: &[String]) -> String {
     format!("{}/api/Query/{}/", base, path)
 }
 
-pub fn parse_filters(args: &[String]) -> Result<Vec<(String, String)>, String> {
+pub fn replace_keywords_in_args(args: &[String]) -> String {
+    let args_string = args.join(" ");
     let keyword_map = get_keyword_map();
-    let replaced_args: Vec<String> = args.iter()
-        .map(|arg| replace_keywords(arg, &keyword_map))
-        .collect();
+    let replaced_args = replace_keywords(&args_string, &keyword_map);
+    replace_human_readable_dates(&replaced_args)
+}
 
-    replaced_args.join(" ")
-        .split(',')
+fn replace_human_readable_dates(input: &str) -> String {
+    let mut result = input.to_string();
+    let re = regex::Regex::new(r"(?i)\b([A-Za-z]+) (\d{1,2})(?: (\d{4}))?(?: @ (\d{1,2}):(\d{2}))?\b").unwrap();
+    let now = Utc::now();
+    let current_year = now.year();
+
+    for cap in re.captures_iter(input) {
+        let month_str = &cap[1];
+        let day: u32 = cap[2].parse().unwrap();
+        let year: i32 = cap.get(3).map_or(current_year, |m| m.as_str().parse().unwrap());
+
+        if let Ok(month) = Month::from_str(month_str) {
+            if let Some(date) = NaiveDate::from_ymd_opt(year, month.number_from_month(), day) {
+                let hour: u32 = cap.get(4).map_or(0, |m| m.as_str().parse().unwrap());
+                let minute: u32 = cap.get(5).map_or(0, |m| m.as_str().parse().unwrap());
+                let datetime = date.and_hms_opt(hour, minute, 0).unwrap();
+                let utc_datetime = datetime.format("%Y-%m-%dT%H:%M:%S%.3f").to_string();
+                result = result.replace(&cap[0], &utc_datetime);
+            }
+        }
+    }
+
+    result
+}
+
+pub fn parse_filters(args: &[String]) -> Result<Vec<(String, String)>, String> {
+    let replaced_args_string = replace_keywords_in_args(args);
+
+    replaced_args_string.split(',')
         .map(str::trim)
         .filter(|s| !s.is_empty())
         .map(parse_filter_clause)
