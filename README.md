@@ -1,5 +1,22 @@
 # payquery
 
+## Setup
+
+1. Clone the repo 
+```bash
+git clone https://github.com/payabli/payquery-cli
+```
+
+2. Compile the code 
+```bash
+cd payquery-cli; cargo build --release
+```
+
+3. Copy the binary to your PATH
+```bash
+cp target/release/payquery <dir-in-your-PATH>
+```
+
 ```
 payquery - A command-line interface for calling Payabli's Query APIs.
 
