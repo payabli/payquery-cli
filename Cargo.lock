@@ -764,6 +764,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "payquery"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "colored",
+ "dirs",
+ "regex",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+]
+
+[[package]]
 name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -794,20 +808,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60946a68e5f9d28b0dc1c21bb8a97ee7d018a8b322fa57838ba31cc878e22d99"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "query-cli"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "colored",
- "dirs",
- "regex",
- "reqwest",
- "serde",
- "serde_json",
- "serde_yaml",
 ]
 
 [[package]]
