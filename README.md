@@ -1,5 +1,9 @@
 # payquery
 
+## Dependencies
+- [cargo](https://doc.rust-lang.org/cargo/getting-started/installation.html)
+- [git](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git)
+
 ## Setup
 
 1. Clone the repo 
