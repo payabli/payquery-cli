@@ -29,14 +29,7 @@ jobs:
 
       - name: Prepare binary name
         id: rename
-        run: |
-          # We'll give each binary a unique name based on OS.
-          # For Windows, add .exe. For others, no extension.
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            echo "name=payquery.exe" >> $GITHUB_OUTPUT
-          else
-            echo "name=payquery" >> $GITHUB_OUTPUT
-          fi
+        run: echo "name=payquery" >> $Env:GITHUB_OUTPUT
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
