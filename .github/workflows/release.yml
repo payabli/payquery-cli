@@ -40,6 +40,8 @@ jobs:
     name: Create Release and Attach Artifacts
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Download Linux, macOS, and Windows build artifacts
         uses: actions/download-artifact@v4
