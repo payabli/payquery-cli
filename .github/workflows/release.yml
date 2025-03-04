@@ -2,8 +2,8 @@ name: Build and Release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'  # This will trigger the workflow only when a tag starting with 'v' is pushed
 
 jobs:
   build:
@@ -40,8 +40,6 @@ jobs:
     name: Create Release and Attach Artifacts
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Download Linux, macOS, and Windows build artifacts
         uses: actions/download-artifact@v4
@@ -71,4 +69,14 @@ jobs:
         uses: actions/upload-release-asset@v1
         with:
           upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: release_artifacts/m
+          asset_path: release_artifacts/macos-latest-binary/payquery
+          asset_name: payquery-macos
+          asset_content_type: application/octet-stream
+
+      - name: Upload Windows Binary
+        uses: actions/upload-release-asset@v1
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: release_artifacts/windows-latest-binary/payquery
+          asset_name: payquery-windows.exe
+          asset_content_type: application/octet-stream
